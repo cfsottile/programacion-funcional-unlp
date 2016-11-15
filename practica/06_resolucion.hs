@@ -1,3 +1,5 @@
+import Data.Maybe (isNothing, isJust, fromJust)
+
 -- 2
 data TipTree a = Tip a | Join (TipTree a) (TipTree a) deriving Show
 -- árbol de prueba
@@ -47,7 +49,13 @@ mapTip f (Join t1 t2) = Join (mapTip f t1) (mapTip f t2)
 
 -- 4
 
-data Seq a = Nil | Unit a | Cat (Seq a) (Seq a) deriving Show
+data Seq a = Nil | Unit a | Cat (Seq a) (Seq a) deriving (Show, Eq)
+
+s1 = (Cat (Cat (Cat Nil Nil) Nil) (Unit 3))
+s2 = (Cat (Cat (Cat (Unit 2) (Unit 3)) (Unit 4)) (Unit 5))
+s3 = (Cat (Cat (Cat Nil Nil) Nil) (Cat (Cat Nil Nil) Nil))
+s4 = (Cat (Cat (Cat Nil Nil) Nil) (Cat (Cat Nil (Unit 2)) (Cat (Unit 4) (Unit 5))))
+s5 = (Cat (Cat Nil (Unit 2)) (Unit 3))
 
 -- appSeq: concatenación de dos secuencias
 appSeq :: Seq a -> Seq a -> Seq a
@@ -78,33 +86,94 @@ revSeq' (Cat s1 s2) = Cat (revSeq' s2) (revSeq' s1)
 revSeq' s = s
 
 -- headSeq
-headSeq :: Seq a -> a
+headSeq :: Seq a -> Maybe a
 -- por recursión sobre la lista
-headSeq (Unit x) = x
-headSeq (Cat s1 s2) = headSeq s1
+headSeq Nil = Nothing
+headSeq (Unit x) = Just x
+headSeq (Cat s1 s2) = 
+    if isNothing (headSeq s1)
+        then headSeq s2
+        else headSeq s1
 
 -- tailSeq
 tailSeq :: Seq a -> Seq a
-tailSeq (Cat s1 s2) = s2
-tailSeq _ = Nil
+-- por recursión sobre la estructura de la secuencia
+tailSeq Nil = Nil
+tailSeq (Unit _) = Nil
+tailSeq (Cat (Unit _) s) = s
+tailSeq (Cat s1 s2) =
+    if isJust (headSeq s1)
+        then appSeq (tailSeq s1) s2
+        else tailSeq s2
 
--- normSeq: retorna el árbol recibido sin los Nil
-normSeq :: Seq a -> Seq a
--- por recursión sobre la secuencia
-normSeq Nil = Nil
-normSeq (Unit x) = (Unit x)
-normSeq (Cat Nil Nil) = Nil
-normSeq (Cat Nil s) = normSeq s
-normSeq (Cat s Nil) = normSeq s
-normSeq (Cat s1 s2) = normSeq (Cat (normSeq s1) (normSeq s2))
+-- -- normSeq: retorna el árbol recibido sin los Nil
+-- normSeq :: Seq a -> Seq a
+-- -- por recursión sobre la secuencia
+-- normSeq Nil = Nil
+-- normSeq (Unit x) = (Unit x)
+-- normSeq (Cat Nil Nil) = Nil
+-- normSeq (Cat Nil s) = normSeq s
+-- normSeq (Cat s Nil) = normSeq s
+-- normSeq (Cat s1 s2) = normSeq (Cat (normSeq s1) (normSeq s2))
+
+-- normSeq
+normSeq1 :: Seq a -> Seq a
+-- por recursión sobre la estructura de la lista
+normSeq1 Nil = Nil
+normSeq1 (Unit x) = Unit x
+normSeq1 (Cat s1 s2) = 
+    if isNil (normSeq1 s1) && (isNil (normSeq1 s2))
+        then Nil
+        else if not (isNil (normSeq1 s1)) && (not (isNil (normSeq1 s2)))
+            then Cat (normSeq1 s1) (normSeq1 s2)
+            else if isNil (normSeq1 s1)
+                then normSeq1 s2
+                else normSeq1 s1
+
+normSeq2 :: Seq a -> Seq a
+-- por recursión sobre la estructura de la lista
+normSeq2 Nil = Nil
+normSeq2 (Unit x) = Unit x
+normSeq2 (Cat s1 s2) =
+    if isNil (normSeq2 s1)
+        then if isNil (normSeq2 s2)
+            then Nil
+            else normSeq2 s2
+        else if isNil (normSeq2 s2)
+            then normSeq2 s1
+            else Cat (normSeq2 s1) (normSeq2 s2)
+
+normSeq3 :: Seq a -> Seq a
+-- por recursión sobre la estructura de la lista
+normSeq3 Nil = Nil
+normSeq3 (Unit x) = Unit x
+normSeq3 (Cat s1 s2) = catNorm s1 s2
+    where catNorm s1 s2 = 
+            if isNil (normSeq3 s1)
+                then if isNil (normSeq3 s2)
+                    then Nil
+                    else normSeq3 s2
+                else if isNil (normSeq3 s2)
+                    then normSeq3 s1
+                    else Cat (normSeq3 s1) (normSeq3 s2)
+
+normSeq4 :: Seq a -> Seq a
+-- por recursión sobre la estructura de la lista
+normSeq4 Nil = Nil
+normSeq4 (Unit x) = Unit x
+normSeq4 (Cat s1 s2) = catNorm (normSeq4 s1) (normSeq4 s2)
+    where catNorm Nil Nil = Nil
+          catNorm Nil s = s
+          catNorm s Nil = s
+          catNorm s1 s2 = Cat s1 s2
+
+
 
 -- eqSeq
 eqSeq :: Eq a => Seq a -> Seq a -> Bool
 -- por recursión sobre la lista
 eqSeq Nil Nil = True
-eqSeq (Unit x) (Unit y) = x == y
-eqSeq (Cat s11 s12) (Cat s21 s22) = (eqSeq s11 s21) && (eqSeq s12 s22)
-eqSeq _ _ = False
+eqSeq s1 s2 = headSeq s1 == headSeq s2 && (eqSeq (tailSeq s1) (tailSeq s2))
 
 -- seq2List
 seq2List :: Seq a -> [a]
@@ -112,6 +181,19 @@ seq2List :: Seq a -> [a]
 seq2List Nil = []
 seq2List (Unit x) = [x]
 seq2List (Cat s1 s2) = seq2List s1 ++ seq2List s2
+
+seq2List' :: Seq a -> [a]
+-- por recursión sobre la estructura de la secuencia
+seq2List' Nil = []
+seq2List' s =
+    if isJust (headSeq s)
+        then fromJust (headSeq s) : (seq2List (tailSeq s))
+        else seq2List (tailSeq s)
+
+-- funciones auxiliares
+isNil :: Seq a -> Bool
+isNil Nil = True
+isNil _ = False
 
 -- 5
 data Form = Atom                | Not Form 
